@@ -1,0 +1,110 @@
+import random
+import requests
+from telegram import Update, MessageEntity, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext, CallbackQueryHandler
+
+# Токен бота, полученный у BotFather
+TOKEN = '6174481090:AAF8_4sKmy41EeuTxT7Zi63jfDgCpSWoD0c'
+
+# URL для получения случайного фильма
+URL = 'https://api.themoviedb.org/3/movie/popular?api_key=your_api_key_here'
+
+# Создаем объект Updater и передаем ему токен бота
+updater = Updater(TOKEN, use_context=True)
+
+# Список стикеров для хорошего настроения
+GOOD_STICKERS = [
+    'CAACAgIAAxkBAAEB5M5gWl3qXvO9OYV7cBzjwJZ8RvZvGQAC7QADt2LsD8gtvX2KjDzIHwQ',
+    'CAACAgIAAxkBAAEB5MlgWl4Dg8Nv1sXzKfH6hCJrNlVZnAAC8AADt2LsDxNfW7VvM9EIHwQ',
+    'CAACAgIAAxkBAAEB5MtgWl4K1m2WfzJjK9X6Jz5uYFQJdAAC9AADt2LsD7a0IyUg4jMIHwQ'
+]
+
+# Список стикеров для плохого настроения
+BAD_STICKERS = [
+    'CAACAgIAAxkBAAEB5MtZWl4KoUJZfjKQJhGx6i2mzG1Y6AAC6QADt2LsD9jK5n5c5PwHwQ',
+    'CAACAgIAAxkBAAEB5MxZWl4Ld9GQa7RJZsWwV8xvZJrLpgAC7AADt2LsD8vXc9hOjJ0IHwQ',
+    'CAACAgIAAxkBAAEB5M1ZWl4M1NvT9KzFbLhT1NwN8rZjNwAC8AADt2LsD3K7Vvq9dQeIHwQ'
+]
+
+# Список загадок
+RIDDLES = [
+    ('Что можно увидеть с закрытыми глазами?', 'Сон'),
+    ('Что необходимо, чтобы его сломать?', 'Яйцо'),
+    ('Что человек теряет, когда встает, а оно остается на месте?', 'Тень'),
+    ('Что такое то, что всегда с вами, но вы его никогда не видите?', 'Дыхание'),
+    ('Что можно сломать только одним словом?', 'Тишина')
+]
+def start(update: Update, context: CallbackContext) -> None:
+    """Обработчик команды /start"""
+    update.message.reply_text('Привет! Я бот-настроение. Напиши мне "хочу фильм", чтобы получить случайный фильм, '
+                              'или "загадка", чтобы получить случайную загадку. А еще я могу поднять тебе настроение '
+                              'стикером. Просто напиши "хорошее настроение" или "плохое настроение".')
+
+def get_random_movie() -> str:
+    """Функция для получения случайного фильма"""
+    response = requests.get(URL)
+    data = response.json()
+    movie = random.choice(data['results'])
+    return f"{movie['title']} ({movie['release_date'][:4]})"
+
+def movie(update: Update, context: CallbackContext) -> None:
+    """Обработчик сообщений с запросом случайного фильма"""
+    update.message.reply_text(get_random_movie())
+
+def get_random_riddle() -> tuple:
+    """Функция для получения случайной загадки"""
+    return random.choice(RIDDLES)
+
+def riddle(update: Update, context: CallbackContext) -> None:
+    """Обработчик сообщений с запросом случайной загадки"""
+    question, answer = get_random_riddle()
+    update.message.reply_text(question)
+
+    # Сохраняем правильный ответ в контексте пользователя
+    context.user_data['riddle_answer'] = answer
+
+def check_riddle_answer(update: Update, context: CallbackContext) -> None:
+    """Обработчик сообщений с ответом на загадку"""
+    answer = update.message.text.lower()
+
+    # Получаем правильный ответ из контекста пользователя
+    correct_answer = context.user_data.get('riddle_answer')
+
+    if answer == correct_answer.lower():
+        update.message.reply_text('Правильно! Молодец!')
+    else:
+        update.message.reply_text(f'Неправильно... Попробуй еще раз. Подсказка: {correct_answer[:2]}...')
+
+def good_mood(update: Update, context: CallbackContext) -> None:
+    """Обработчик сообщений с запросом на стикер для хорошего настроения"""
+    sticker = random.choice(GOOD_STICKERS)
+    update.message.reply_sticker(sticker)
+
+def bad_mood(update: Update, context: CallbackContext) -> None:
+    """Обработчик сообщений с запросом на стикер для плохого настроения"""
+    sticker = random.choice(BAD_STICKERS)
+    update.message.reply_sticker(sticker)
+
+def main() -> None:
+    """Основная функция бота"""
+    # Получаем диспетчер для регистрации обработчиков
+    dispatcher = updater.dispatcher
+
+    # Регистрируем обработчики команд
+    dispatcher.add_handler(CommandHandler('start', start))
+    dispatcher.add_handler(CommandHandler('movie', movie))
+    dispatcher.add_handler(CommandHandler('riddle', riddle))
+
+    # Регистрируем обработчики сообщений
+    dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, check_riddle_answer))
+    dispatcher.add_handler(MessageHandler(Filters.regex(r'хорошее настроение'), good_mood))
+    dispatcher.add_handler(MessageHandler(Filters.regex(r'плохое настроение'), bad_mood))
+
+    # Запускаем бота
+    updater.start_polling()
+
+    # Останавливаем бота при нажатии Ctrl+C
+    updater.idle()
+
+if __name__ == '__main__':
+    main()
